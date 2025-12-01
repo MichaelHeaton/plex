@@ -1,0 +1,39 @@
+version: "3.2"
+services:
+  # Plex - https://hotio.dev/containers/plex/
+  # mkdir -p /volume1/docker/appdata/plex
+  # Also please read the extra info => https://trash-guides.info/Hardlinks/How-to-setup-for/Synology/#appdata
+  plex:
+    container_name: plex
+    image: ghcr.io/hotio/plex
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-file: ${DOCKERLOGGING_MAXFILE}
+        max-size: ${DOCKERLOGGING_MAXSIZE}
+    labels:
+      - org.hotio.pullio.update=${PULLIO_UPDATE}
+      - org.hotio.pullio.notify=${PULLIO_NOTIFY}
+      - org.hotio.pullio.discord.webhook=${PULLIO_DISCORD_WEBHOOK}
+    ports:
+      - "32401:32400" # Use different port to avoid conflict with DSM
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - UMASK=002
+      - PLEX_CLAIM_TOKEN=${PLEX_CLAIM_TOKEN}
+      - PLEX_ADVERTISE_URL=${PLEX_ADVERTISE_URL}
+      - PLEX_NO_AUTH_NETWORKS=${LAN_NETWORK}
+      - PLEX_BETA_INSTALL=${PLEX_BETA_INSTALL}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DOCKERCONFDIR}/plex:/config:rw
+      - ${DOCKERSTORAGEDIR}/Media:/data/media:rw
+    # Uncomment if you have Intel Quick Sync for hardware transcoding
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # Uncomment if you have enough RAM for transcoding in RAM
+    # tmpfs:
+    #   - /transcode
