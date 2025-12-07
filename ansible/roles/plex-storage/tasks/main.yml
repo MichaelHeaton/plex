@@ -1,0 +1,124 @@
+---
+# Plex Storage Configuration Role
+# Configures NFS mounts and folder structure
+# Note: VM mounts NFS from NAS via Proxmox host routing (VLAN 10 -> VLAN 30 routing)
+# VM does NOT have direct VLAN 30 access - all storage access is routed through Proxmox host
+
+- name: Install NFS client utilities
+  ansible.builtin.apt:
+    name:
+      - nfs-common
+    state: present
+    update_cache: true
+
+- name: Remove test mount point if it exists
+  ansible.builtin.file:
+    path: /mnt/streaming-test
+    state: absent
+
+- name: Create mount point directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  loop:
+    - "{{ streaming_mount }}"
+    - "/mnt/backup-temp" # Temporary mount point for full backup share
+    - "{{ backups_mount }}" # Final bind mount point (isolated to plex subdirectory)
+  ignore_errors: true # May fail if already mounted with different ownership
+
+- name: Configure NFS mounts in /etc/fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: "{{ item.server_ip }}:{{ item.remote_path }} {{ item.vm_path }} {{ item.fstype }} {{ item.opts }} 0 0"
+    regexp: "^{{ item.server_ip }}:{{ item.remote_path }}"
+    state: present
+    backup: true
+  loop:
+    - {
+        server_ip: "172.16.30.4", # NAS02 (UNAS) - Use /var/nfs/shared/[Shared Drive Name] format, NFSv3
+        remote_path: "/var/nfs/shared/media_streaming",
+        vm_path: "{{ streaming_mount }}",
+        fstype: "nfs",
+        opts: "vers=3,rsize=1048576,wsize=1048576,hard,intr,timeo=600,actimeo=600,_netdev",
+      }
+    - {
+        server_ip: "172.16.30.5", # NAS01 - Mount full backup share to temporary location
+        remote_path: "/volume3/backup",
+        vm_path: "/mnt/backup-temp",
+        fstype: "nfs4",
+        opts: "vers=4,rsize=1048576,wsize=1048576,hard,intr,timeo=600,actimeo=600,_netdev",
+      }
+
+- name: Configure bind mount for isolated backup access
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: "/mnt/backup-temp/plex {{ backups_mount }} none bind 0 0"
+    regexp: "^/mnt/backup-temp/plex"
+    state: present
+    backup: true
+
+- name: Mount NFS shares
+  ansible.posix.mount:
+    path: "{{ item.vm_path }}"
+    src: "{{ item.server_ip }}:{{ item.remote_path }}"
+    fstype: "{{ item.fstype }}"
+    state: mounted
+    opts: "{{ item.opts }}"
+  loop:
+    - {
+        server_ip: "172.16.30.4", # NAS02 (UNAS) - Use /var/nfs/shared/[Shared Drive Name] format, NFSv3
+        remote_path: "/var/nfs/shared/media_streaming",
+        vm_path: "{{ streaming_mount }}",
+        fstype: "nfs",
+        opts: "vers=3,rsize=1048576,wsize=1048576,hard,intr,timeo=600,actimeo=600,_netdev",
+      }
+    - {
+        server_ip: "172.16.30.5", # NAS01 - Mount full backup share to temporary location
+        remote_path: "/volume3/backup",
+        vm_path: "/mnt/backup-temp",
+        fstype: "nfs4",
+        opts: "vers=4,rsize=1048576,wsize=1048576,hard,intr,timeo=600,actimeo=600,_netdev",
+      }
+  ignore_errors: true # May fail if shares don't exist or routing not configured yet
+
+- name: Mount bind point for isolated backup access
+  ansible.posix.mount:
+    path: "{{ backups_mount }}"
+    src: "/mnt/backup-temp/plex"
+    fstype: none
+    state: mounted
+    opts: bind
+  when: ansible_mounts | selectattr('mount', 'equalto', '/mnt/backup-temp') | list | length > 0
+
+- name: Check if NFS mounts are available
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: mount_check
+  loop:
+    - "{{ streaming_mount }}"
+    - "{{ backups_mount }}"
+  ignore_errors: true
+
+- name: Create folder structure on /mnt/streaming
+  ansible.builtin.file:
+    path: "{{ streaming_mount }}/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - movies
+    - series
+    - downloads/torrents
+    - downloads/usenet
+    - downloads/completed
+    - downloads/staging
+    - transcoding
+  when:
+    - streaming_mount is defined
+    - item is defined
+    # Only create if mount point exists and is accessible
+    - mount_check.results | selectattr('item', 'equalto', streaming_mount) | map(attribute='stat.exists') | first | default(false)
+  ignore_errors: true # May fail on ownership if NFS doesn't allow chown
+# Backup directory is mounted directly to /backup/plex, no need to create subdirectories

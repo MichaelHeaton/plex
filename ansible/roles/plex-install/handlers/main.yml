@@ -1,0 +1,7 @@
+---
+# Handlers for Plex Installation Role
+
+- name: restart plex
+  ansible.builtin.systemd:
+    name: plexmediaserver
+    state: restarted

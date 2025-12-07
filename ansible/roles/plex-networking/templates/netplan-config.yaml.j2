@@ -1,0 +1,23 @@
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ network_interfaces.stdout_lines[0] }}:  # VLAN 10 (Production)
+      dhcp4: false
+      addresses:
+        - {{ vm_static_ip }}/24
+      routes:
+        - to: default
+          via: {{ vm_gateway }}
+      nameservers:
+        addresses:
+{% for dns in vm_dns_servers %}
+          - {{ dns }}
+{% endfor %}
+{% if network_interfaces.stdout_lines | length >= 2 %}
+    {{ network_interfaces.stdout_lines[1] }}:  # VLAN 30 (Storage) - Direct NFS access
+      dhcp4: false
+      addresses:
+        - {{ vm_storage_ip }}/24
+{% endif %}
+

@@ -1,0 +1,71 @@
+---
+# Role: plex-ssh-keys
+# Purpose: Add SSH public keys to the packer user for secure access
+# This role should run early in the playbook, before other roles
+
+- name: Get SSH public keys from control node
+  ansible.builtin.find:
+    paths: "{{ ansible_env.HOME }}/.ssh"
+    patterns:
+      - "id_ed25519.pub"
+      - "id_rsa.pub"
+    file_type: file
+  register: ssh_key_files
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Read SSH public keys
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  register: ssh_key_contents
+  delegate_to: localhost
+  become: false
+  loop: "{{ ssh_key_files.files }}"
+  when: ssh_key_files.files | length > 0
+
+- name: Create .ssh directory for packer user
+  ansible.builtin.file:
+    path: /home/packer/.ssh
+    state: directory
+    owner: packer
+    group: packer
+    mode: "0700"
+
+- name: Add SSH public keys to authorized_keys
+  ansible.builtin.authorized_key:
+    user: packer
+    key: "{{ item.content | b64decode | trim }}"
+    state: present
+    exclusive: false
+  loop: "{{ ssh_key_contents.results }}"
+  when:
+    - ssh_key_contents.results is defined
+    - ssh_key_contents.results | length > 0
+
+- name: Ensure authorized_keys has correct permissions
+  ansible.builtin.file:
+    path: /home/packer/.ssh/authorized_keys
+    owner: packer
+    group: packer
+    mode: "0600"
+  when: ssh_key_contents.results | length > 0
+
+- name: Disable password authentication (security hardening)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^PasswordAuthentication"
+    line: "PasswordAuthentication no"
+    backup: true
+  notify: restart sshd
+
+- name: Verify SSH keys were added
+  ansible.builtin.stat:
+    path: /home/packer/.ssh/authorized_keys
+  register: authorized_keys_file
+  changed_when: false
+
+- name: Display SSH key status
+  ansible.builtin.debug:
+    msg: "SSH keys added successfully. Password authentication will be disabled after SSH service restart."
+  when: authorized_keys_file.stat.exists

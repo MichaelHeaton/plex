@@ -1,0 +1,42 @@
+---
+# Plex Backup Configuration Role
+# Configures automated backups for Plex database
+
+- name: Create backup script directory
+  ansible.builtin.file:
+    path: /usr/local/bin
+    state: directory
+    mode: "0755"
+
+- name: Create Plex database backup script
+  ansible.builtin.template:
+    src: backup-plex-db.sh.j2
+    dest: /usr/local/bin/backup-plex-db.sh
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create systemd service for backup
+  ansible.builtin.template:
+    src: plex-backup.service.j2
+    dest: /etc/systemd/system/plex-backup.service
+    mode: "0644"
+    owner: root
+    group: root
+  notify: reload systemd
+
+- name: Create systemd timer for backup
+  ansible.builtin.template:
+    src: plex-backup.timer.j2
+    dest: /etc/systemd/system/plex-backup.timer
+    mode: "0644"
+    owner: root
+    group: root
+  notify: reload systemd
+
+- name: Enable and start backup timer
+  ansible.builtin.systemd:
+    name: plex-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

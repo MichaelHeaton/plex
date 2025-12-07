@@ -1,0 +1,16 @@
+---
+# Playbook: Configure GPU for Plex VM
+# Purpose: Install NVIDIA drivers and configure hardware transcoding
+# Target: plex-vm-01
+
+- name: Configure GPU for Plex VM
+  become: true
+  become_method: sudo
+  hosts: plex_vms
+  gather_facts: true
+
+  vars:
+    plex_user: "plex"
+
+  roles:
+    - plex-gpu

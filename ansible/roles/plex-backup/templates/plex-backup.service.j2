@@ -1,0 +1,12 @@
+[Unit]
+Description=Plex Media Server Database Backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup-plex-db.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+
