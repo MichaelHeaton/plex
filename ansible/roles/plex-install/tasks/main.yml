@@ -1,0 +1,50 @@
+---
+# Plex Installation Role
+# Installs and configures Plex Media Server
+
+- name: Create plex user
+  ansible.builtin.user:
+    name: "{{ plex_user }}"
+    system: true
+    shell: /bin/false
+    home: /var/lib/plexmediaserver
+    create_home: true
+
+- name: Add Plex repository key
+  ansible.builtin.apt_key:
+    url: https://downloads.plex.tv/plex-keys/PlexSign.key
+    state: present
+
+- name: Add Plex repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://downloads.plex.tv/repo/deb public main"
+    state: present
+    update_cache: true
+
+- name: Install Plex Media Server
+  ansible.builtin.apt:
+    name: plexmediaserver
+    state: present
+    update_cache: true
+
+- name: Ensure Plex service is enabled and started
+  ansible.builtin.systemd:
+    name: plexmediaserver
+    enabled: true
+    state: started
+
+- name: Configure Plex environment file
+  ansible.builtin.template:
+    src: plex-env.j2
+    dest: /etc/default/plexmediaserver
+    mode: "0644"
+    backup: true
+  notify: restart plex
+
+- name: Set Plex transcoding directory
+  ansible.builtin.lineinfile:
+    path: /etc/default/plexmediaserver
+    regexp: "^PLEX_MEDIA_SERVER_TMPDIR="
+    line: "PLEX_MEDIA_SERVER_TMPDIR={{ streaming_mount }}/transcoding"
+    state: present
+  notify: restart plex

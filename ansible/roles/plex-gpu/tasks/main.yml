@@ -1,0 +1,109 @@
+---
+# Plex GPU Configuration Role
+# Installs NVIDIA drivers and configures hardware transcoding
+
+- name: Check if GPU is present
+  ansible.builtin.shell: lspci | grep -i nvidia
+  register: gpu_check
+  changed_when: false
+  failed_when: false
+
+- name: Fail if no GPU detected
+  ansible.builtin.fail:
+    msg: "No NVIDIA GPU detected. GPU passthrough may not be configured correctly."
+  when: gpu_check.rc != 0 or gpu_check.stdout == ""
+
+- name: Update package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install required packages for NVIDIA driver installation
+  ansible.builtin.apt:
+    name:
+      - ubuntu-drivers-common
+      - software-properties-common
+      - build-essential
+      - dkms
+    state: present
+
+- name: Add NVIDIA PPA repository
+  ansible.builtin.apt_repository:
+    repo: "ppa:graphics-drivers/ppa"
+    state: present
+    update_cache: true
+
+- name: Check if NVIDIA drivers are already installed
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-smi
+  register: nvidia_smi_exists
+
+- name: Detect recommended NVIDIA driver version
+  ansible.builtin.command: ubuntu-drivers devices
+  register: recommended_driver
+  changed_when: false
+  when: not nvidia_smi_exists.stat.exists
+
+- name: Display recommended driver
+  ansible.builtin.debug:
+    msg: "Recommended driver: {{ recommended_driver.stdout }}"
+  when: not nvidia_smi_exists.stat.exists
+
+- name: Install NVIDIA drivers (autoinstall - installs recommended version)
+  ansible.builtin.command: ubuntu-drivers autoinstall
+  args:
+    creates: /usr/bin/nvidia-smi
+  async: 600
+  poll: 30
+  register: driver_install
+  when: not nvidia_smi_exists.stat.exists
+  # This will take 5-10 minutes. GTX 1650 works well with driver 535 or 545
+
+- name: Verify NVIDIA driver installation
+  ansible.builtin.command: nvidia-smi
+  register: nvidia_smi_check
+  changed_when: false
+  failed_when: false
+
+- name: Check if reboot is required
+  ansible.builtin.set_fact:
+    reboot_required: "{{ nvidia_smi_check.rc != 0 }}"
+  when: driver_install.changed | default(false)
+
+- name: Display GPU information (if working)
+  ansible.builtin.debug:
+    msg: "{{ nvidia_smi_check.stdout_lines }}"
+  when: nvidia_smi_check.rc == 0
+
+- name: Warn that reboot is required
+  ansible.builtin.debug:
+    msg:
+      - "NVIDIA drivers have been installed but require a reboot to load."
+      - "Please reboot the VM and then re-run this playbook to verify GPU detection."
+      - "After reboot, run: ansible-playbook playbooks/configure-gpu.yml -i inventory/plex-vm.yml"
+  when: nvidia_smi_check.rc != 0 and (driver_install.changed | default(false))
+
+- name: Check if nvidia-persistenced service exists
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/nvidia-persistenced.service
+  register: nvidia_persistenced_service
+
+- name: Enable nvidia-persistenced service (if available and driver loaded)
+  ansible.builtin.systemd:
+    name: nvidia-persistenced
+    enabled: true
+    state: started
+  when:
+    - nvidia_persistenced_service.stat.exists
+    - nvidia_smi_check.rc == 0
+  ignore_errors: true
+
+- name: Display final status and next steps
+  ansible.builtin.debug:
+    msg:
+      - "=== GPU Configuration Status ==="
+      - "{{ 'GPU drivers installed and working!' if nvidia_smi_check.rc == 0 else 'GPU drivers installed but require reboot.' }}"
+      - "{{ 'You can now enable hardware transcoding in Plex settings.' if nvidia_smi_check.rc == 0 else 'Please reboot the VM, then re-run this playbook to verify.' }}"
+      - ""
+      - "To reboot: ssh packer@172.16.10.20 'sudo reboot'"
+      - "After reboot, verify with: nvidia-smi"

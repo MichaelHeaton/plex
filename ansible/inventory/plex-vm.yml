@@ -1,0 +1,20 @@
+---
+# Inventory for Plex VM
+# Static IP: 172.16.10.20 (VLAN 10 - Production)
+#
+# NOTE: If password auth is enabled on the VM, uncomment the password line below
+# After first run, the playbook will add SSH keys and disable password auth
+
+all:
+  children:
+    plex_vms:
+      hosts:
+        plex-vm-01:
+          ansible_host: 172.16.10.20  # Static IP (VLAN 10 - Production)
+          ansible_user: packer
+          # Temporary: Use password auth if SSH keys not configured yet
+          # Uncomment the line below if you enabled password auth via Proxmox console
+          # ansible_ssh_pass: "packer"  # Default password from template
+          ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes"
+          ansible_ssh_private_key_file: ~/.ssh/vm-access-key
+

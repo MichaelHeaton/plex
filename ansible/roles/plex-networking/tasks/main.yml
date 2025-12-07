@@ -1,0 +1,85 @@
+---
+# Plex Networking Configuration Role
+# Configures hostname, static IP, firewall, and network settings
+
+- name: Update system packages
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+    autoremove: true
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ vm_hostname }}"
+
+- name: Install netplan if not present
+  ansible.builtin.apt:
+    name: netplan.io
+    state: present
+
+- name: Get network interface names
+  ansible.builtin.shell: ip -o link show | grep -v lo | awk '{print $2}' | sed 's/:$//'
+  register: network_interfaces
+  changed_when: false
+
+- name: Remove cloud-init netplan configuration (conflicts with static IP)
+  ansible.builtin.file:
+    path: /etc/netplan/50-cloud-init.yaml
+    state: absent
+  become: true
+
+- name: Configure static IP with netplan (VLAN 10 for production, VLAN 30 for storage)
+  ansible.builtin.template:
+    src: netplan-config.yaml.j2
+    dest: /etc/netplan/01-netcfg.yaml
+    mode: "0600"
+    backup: true
+  when: network_interfaces.stdout_lines | length >= 1
+
+- name: Apply netplan configuration
+  ansible.builtin.command: netplan apply
+  register: netplan_result
+  changed_when: netplan_result.rc == 0
+
+- name: Remove any DHCP-assigned IP addresses (cleanup)
+  ansible.builtin.shell: |
+    # Get all IP addresses on the interface
+    for ip in $(ip addr show {{ network_interfaces.stdout_lines[0] }} | grep "inet " | awk '{print $2}' | cut -d'/' -f1); do
+      # Skip the static IP we just configured
+      if [ "$ip" != "{{ vm_static_ip }}" ]; then
+        # Remove the secondary/dynamic IP
+        ip addr del $ip/24 dev {{ network_interfaces.stdout_lines[0] }} 2>/dev/null || true
+      fi
+    done
+  when: network_interfaces.stdout_lines | length >= 1
+  ignore_errors: true
+
+- name: Install UFW if not present
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+- name: Configure UFW default policies
+  ansible.builtin.ufw:
+    state: enabled
+    policy: "{{ item.policy }}"
+    direction: "{{ item.direction }}"
+  loop:
+    - { policy: deny, direction: incoming }
+    - { policy: allow, direction: outgoing }
+
+- name: Allow SSH
+  ansible.builtin.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow Plex Media Server
+  ansible.builtin.ufw:
+    rule: allow
+    port: "32400"
+    proto: tcp
+
+- name: Reload UFW
+  ansible.builtin.ufw:
+    state: reloaded

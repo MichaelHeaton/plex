@@ -1,0 +1,49 @@
+#!/bin/bash
+# Plex Database Backup Script
+# Backs up Plex database to {{ backups_mount }}/
+# Retention: Keeps last 14 days of backups
+
+set -euo pipefail
+
+PLEX_DB_DIR="/var/lib/plexmediaserver/Library/Application Support/Plex Media Server"
+BACKUP_DIR="{{ backups_mount }}"
+RETENTION_DAYS=14
+DATE=$(date +%Y%m%d-%H%M%S)
+BACKUP_NAME="plex-db-backup-${DATE}.tar.gz"
+
+# Create backup directory if it doesn't exist
+mkdir -p "${BACKUP_DIR}"
+
+# Check if Plex database directory exists
+if [ ! -d "${PLEX_DB_DIR}" ]; then
+    echo "Error: Plex database directory not found: ${PLEX_DB_DIR}"
+    exit 1
+fi
+
+# Create backup
+echo "Creating Plex database backup: ${BACKUP_NAME}"
+tar -czf "${BACKUP_DIR}/${BACKUP_NAME}" \
+    -C "${PLEX_DB_DIR}" \
+    --exclude="Cache" \
+    --exclude="Codecs" \
+    --exclude="Crash Reports" \
+    --exclude="Logs" \
+    .
+
+# Verify backup was created
+if [ -f "${BACKUP_DIR}/${BACKUP_NAME}" ]; then
+    BACKUP_SIZE=$(du -h "${BACKUP_DIR}/${BACKUP_NAME}" | cut -f1)
+    echo "Backup created successfully: ${BACKUP_NAME} (${BACKUP_SIZE})"
+else
+    echo "Error: Backup file was not created"
+    exit 1
+fi
+
+# Remove old backups (older than retention days)
+echo "Cleaning up backups older than ${RETENTION_DAYS} days..."
+find "${BACKUP_DIR}" -name "plex-db-backup-*.tar.gz" -type f -mtime +${RETENTION_DAYS} -delete
+
+# List remaining backups
+BACKUP_COUNT=$(find "${BACKUP_DIR}" -name "plex-db-backup-*.tar.gz" -type f | wc -l)
+echo "Total backups retained: ${BACKUP_COUNT}"
+

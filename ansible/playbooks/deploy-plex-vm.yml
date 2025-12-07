@@ -1,0 +1,31 @@
+---
+# Playbook: Deploy and Configure Plex VM
+# Purpose: Complete configuration of Plex Media Server VM
+# Target: plex-vm-01
+
+- name: Deploy and Configure Plex VM
+  become: true
+  become_method: sudo
+  hosts: plex_vms
+  gather_facts: true
+
+  vars:
+    vm_hostname: "plex-vm-01"
+    vm_static_ip: "172.16.10.20" # VLAN 10 (Production)
+    vm_storage_ip: "172.16.30.20" # VLAN 30 (Storage) - Direct access to NFS
+    vm_netmask: "255.255.255.0"
+    vm_gateway: "172.16.10.1"
+    vm_dns_servers:
+      - "172.16.10.2" # Primary DNS (VLAN 10)
+      - "172.16.10.1" # Secondary DNS (VLAN 10)
+      - "1.1.1.1" # Cloudflare (Tertiary)
+    plex_user: "plex"
+    streaming_mount: "/mnt/streaming"
+    backups_mount: "/backup"
+
+  roles:
+    - plex-ssh-keys # Add SSH keys first, then disable password auth
+    - plex-networking
+    - plex-storage
+    - plex-install
+    - plex-backup
