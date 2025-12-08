@@ -135,15 +135,24 @@ This checklist covers the manual steps required after the Ansible playbook has b
    nslookup plex-vm-01.specterrealm.com
    ```
 
-### 11. Configure Traefik Routing (Deferred)
+### 11. Configure Traefik Routing ✅
 
-**Status**: Traefik is currently broken (Docker Swarm needs rebuilding)
+**Status**: ✅ Complete
 
-**When Traefik is available**:
+**Traefik routing is now configured**:
 
-1. Add Traefik route for `streaming.specterrealm.com` → `172.16.10.20:32400`
-2. Configure SSL certificate (Let's Encrypt)
-3. Test access via `https://streaming.specterrealm.com`
+1. ✅ Traefik route added: `streaming.specterrealm.com` → `172.16.10.20:32400`
+2. ✅ SSL certificate configured (Let's Encrypt via Cloudflare DNS challenge)
+3. ✅ DNS record added: `streaming.specterrealm.com` (CNAME to `traefik.specterrealm.com`)
+4. ✅ Accessible at: `https://streaming.specterrealm.com`
+
+**Configuration Details**:
+
+- Route configured in `docker-swarm/stacks/dynamic/traefik-routers.yml`
+- Service: `plex` (file provider, points to Plex VM)
+- Backend: `http://172.16.10.20:32400`
+- SSL: Automatic via Let's Encrypt
+- Access: LAN only (172.16.0.0/12, 10.0.0.0/8)
 
 ## Verification Checklist
 
@@ -155,7 +164,9 @@ This checklist covers the manual steps required after the Ansible playbook has b
 - [ ] GPU passthrough working (if configured) - `nvidia-smi` shows GPU
 - [ ] Media playback working
 - [ ] Backup automation running (check timer status)
-- [ ] DNS record added for `plex-vm-01.specterrealm.com`
+- [x] DNS record added for `plex-vm-01.specterrealm.com`
+- [x] DNS record added for `streaming.specterrealm.com` (CNAME to Traefik)
+- [x] Traefik route configured for `streaming.specterrealm.com`
 - [ ] Firewall allows Plex port (32400)
 
 ## Next Steps
@@ -175,10 +186,10 @@ This checklist covers the manual steps required after the Ansible playbook has b
    - Stop old Plex container on NAS01
    - Remove Docker Compose configuration (optional)
 
-4. **Traefik Integration** (After Docker Swarm rebuild):
-   - Configure Traefik route
-   - Set up SSL certificate
-   - Test access via `https://streaming.specterrealm.com`
+4. **Traefik Integration** ✅ Complete:
+   - ✅ Traefik route configured
+   - ✅ SSL certificate set up (Let's Encrypt)
+   - ✅ Accessible at `https://streaming.specterrealm.com`
 
 ## Troubleshooting
 

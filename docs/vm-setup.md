@@ -96,7 +96,7 @@ This document describes the setup and configuration of the Plex Media Server VM 
 ### Web UI
 
 - **Direct**: `http://172.16.10.20:32400`
-- **Via Traefik**: `https://streaming.specterrealm.com` (after Traefik rebuild)
+- **Via Traefik**: `https://streaming.specterrealm.com` ✅ (configured)
 
 ### SSH
 
@@ -114,4 +114,4 @@ ssh packer@172.16.10.20
 
 - Old Plex server (NAS01 Docker) remains running during migration
 - Watch history sync deferred until new server is operational
-- Traefik routing will be configured after Docker Swarm rebuild
+- ✅ Traefik routing configured: `https://streaming.specterrealm.com` → `172.16.10.20:32400`

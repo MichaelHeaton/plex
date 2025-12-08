@@ -74,7 +74,7 @@ All VM configuration is managed via Ansible in this repository:
 
 ## Network Configuration
 
-- **Service DNS**: `streaming.specterrealm.com` (via Traefik - deferred)
+- **Service DNS**: `streaming.specterrealm.com` (via Traefik - ✅ configured)
 - **Device DNS**: `plex-vm-01.specterrealm.com`
 - **Static IP**: 172.16.10.20 (VLAN 10 - Production)
 - **Storage Network**: VLAN 30 (for NFS access)
